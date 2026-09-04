@@ -24,10 +24,11 @@ CLEAN_DIR = REPO_ROOT / "data" / "clean"
 # Changing this regenerates a different (but equally valid) history.
 SEED = int(os.environ.get("VELLA_SEED", "20240117"))
 
-# The synthetic history runs 2024-09-01 .. 2026-08-31. We report as of the day
-# after the last order so the return window below is closed for every order and
-# monthly return rates are comparable across the whole period.
-AS_OF_DATE = date.fromisoformat(os.environ.get("VELLA_AS_OF_DATE", "2026-09-01"))
+# Order history runs for the 24 full months before this date; returns are only
+# counted up to it. It sits about two weeks after the last order month, so the
+# most recent months still have returns in flight. The pipeline flags those
+# months as provisional rather than pretending their margin is final.
+AS_OF_DATE = date.fromisoformat(os.environ.get("VELLA_AS_OF_DATE", "2026-09-15"))
 
 # Own-store list prices are VAT-inclusive; Amazon and the EU marketplace are
 # exclusive. Own-store revenue is divided by (1 + VAT_RATE) in cleaning so

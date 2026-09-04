@@ -22,7 +22,7 @@ returns are counted.
 ## Running it
 
     pip install -r requirements.txt
-    python data/generate.py
+    python -m data.generate
     python -m pipeline.clean
     streamlit run app/Overview.py
 
