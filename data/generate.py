@@ -117,18 +117,6 @@ SHIP_COUNTRY_FACTOR = {
 EXPRESS_MULT = 1.85
 
 
-def weight_band(w: float) -> str:
-    if w <= 0.5:
-        return "0-0.5"
-    if w <= 1.0:
-        return "0.5-1"
-    if w <= 2.0:
-        return "1-2"
-    if w <= 5.0:
-        return "2-5"
-    return "5+"
-
-
 def month_starts() -> list[date]:
     """First-of-month dates for the 24 full months before the AS_OF_DATE month."""
     y, m = AS_OF_DATE.year, AS_OF_DATE.month
