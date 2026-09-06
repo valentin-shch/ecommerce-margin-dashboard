@@ -1,11 +1,8 @@
-"""Raw CSV -> clean parquet.
+"""Raw CSV -> clean parquet: resolve SKUs, fix VAT and discount errors, attach
+returns to their order line without duplicating revenue.
 
-Resolves per-channel SKU codes to the canonical SKU, fixes the VAT and
-discount data errors, and attaches returns to the order line they belong to
-without duplicating any revenue. Nothing here decides how margin is
-calculated; it only produces a trustworthy, fully-joined fact table for
-pipeline/metrics.py to work from. Every data-quality issue is flagged on the
-row, never silently dropped or imputed.
+Joins and hygiene only, no margin math (that's metrics.py). Data-quality
+issues are flagged on the row, never dropped or imputed.
 
 Run with:  python -m pipeline.clean
 """
@@ -47,9 +44,7 @@ def load_raw() -> dict[str, pd.DataFrame]:
 
 
 def resolve_sku(df: pd.DataFrame, mapping: pd.DataFrame, sku_col: str) -> pd.DataFrame:
-    """Attach the canonical SKU for a channel-native code. A code with no
-    match keeps canonical_sku null and unmapped=True rather than being
-    dropped or guessed at."""
+    """Attach the canonical SKU. No match -> canonical_sku null, unmapped=True."""
     lookup = (mapping.assign(_key=_normalise(mapping["channel_sku"]))
               [["channel", "_key", "sku"]]
               .drop_duplicates(["channel", "_key"])
@@ -60,10 +55,8 @@ def resolve_sku(df: pd.DataFrame, mapping: pd.DataFrame, sku_col: str) -> pd.Dat
 
 
 def clean_returns(raw: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Return events at their native grain (one row per return), with the
-    channel and canonical SKU attached. Used by the Returns page for the
-    reason/condition breakdown; the line-grain summary used for margin lives
-    on order_lines."""
+    """One row per return event, with channel and canonical SKU attached.
+    Feeds the Returns page; the line-grain summary lives on order_lines."""
     order_channel = raw["orders"][["order_id", "channel"]].drop_duplicates()
     returns = raw["returns"].merge(order_channel, on="order_id", how="left")
     returns = resolve_sku(returns, raw["sku_mapping"], sku_col="sku")
@@ -75,9 +68,8 @@ def clean_returns(raw: dict[str, pd.DataFrame]) -> pd.DataFrame:
 def clean_order_lines(raw: dict[str, pd.DataFrame], returns: pd.DataFrame) -> pd.DataFrame:
     orders = resolve_sku(raw["orders"], raw["sku_mapping"], sku_col="sku")
 
-    # order_id + the exact native code is unique per line (one order never
-    # repeats a SKU), so it is a safe key to reattach return events without
-    # widening the table.
+    # order_id + native code is unique per line, so joining returns on it can't
+    # fan out the table.
     orders["line_key"] = orders["order_id"] + "||" + _normalise(orders["sku"])
     returns = returns.assign(line_key=returns["order_id"] + "||" + _normalise(returns["sku"]))
     returns = returns.assign(
@@ -92,7 +84,7 @@ def clean_order_lines(raw: dict[str, pd.DataFrame], returns: pd.DataFrame) -> pd
 
     n_before = len(orders)
     orders = orders.merge(returns_by_line, on="line_key", how="left")
-    assert len(orders) == n_before, "returns join changed row count — grain violation"
+    assert len(orders) == n_before, "returns join changed row count, grain violation"
     orders[["returned_qty", "resellable_qty", "return_events"]] = (
         orders[["returned_qty", "resellable_qty", "return_events"]].fillna(0).astype(int))
 
@@ -100,9 +92,7 @@ def clean_order_lines(raw: dict[str, pd.DataFrame], returns: pd.DataFrame) -> pd
     orders["returned_qty"] = orders[["returned_qty", "quantity"]].min(axis=1)
     orders["resellable_qty"] = orders[["resellable_qty", "returned_qty"]].min(axis=1)
 
-    # Own-store prices are entered VAT-inclusive; Amazon and the marketplace
-    # are not. Divide down to net here so every channel is on the same basis
-    # for the rest of the pipeline.
+    # Own-store prices come in VAT-inclusive; strip to net so channels match.
     is_own_store = orders["channel"] == "own_store"
     orders.loc[is_own_store, "unit_price"] = (orders.loc[is_own_store, "unit_price"] / (1 + VAT_RATE)).round(2)
     orders.loc[is_own_store, "discount"] = (orders.loc[is_own_store, "discount"] / (1 + VAT_RATE)).round(2)

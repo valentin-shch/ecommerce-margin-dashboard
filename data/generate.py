@@ -1,10 +1,7 @@
-"""Synthetic data for Vella Home, a fictional home-and-kitchen brand.
+"""Synthetic data for Vella Home, a made-up home-and-kitchen brand.
 
-Produces 24 months of orders, products, returns and the reference tables the
-pipeline needs, written to data/raw/ as CSV. The output is deliberately messy:
-per-channel SKU codes, partial returns, late returns, missing costs and a few
-genuine data errors. Everything is driven by one seeded RNG so a given seed
-always produces the same files.
+24 months of orders, products and returns written to data/raw/ as CSV, left
+deliberately messy. One seeded RNG, so a seed always gives the same files.
 
 Run with:  python -m data.generate
 """
@@ -67,10 +64,8 @@ NOUNS = {
 SUPPLIERS = ["Northwind Supply Co", "Aureli SRL", "Meridian Homeware",
              "Kestrel Trading Ltd", "Baltic & Byrne", "Lumen Goods"]
 
-# Hand-specified SKUs that carry the story. Ranks are positions in the
-# popularity order (0 = best seller). The three loss makers look fine on price
-# vs cost; they only turn negative once channel fees, shipping and returns are
-# applied, which is the pipeline's job to show.
+# SKUs that carry the story, keyed by popularity rank (0 = best seller). The
+# loss makers look fine on price vs cost; fees, shipping and returns sink them.
 FORCED = {
     0: dict(category="Utensils", name="Bamboo Kitchen Utensil Set",
             cost_price=2.60, weight_kg=0.34, markup=1.62, ret_mult=1.0),
@@ -130,8 +125,8 @@ def month_starts() -> list[date]:
 
 
 def build_products(rng) -> pd.DataFrame:
-    # Popularity is a heavy-tailed weight vector; a handful of SKUs do most of
-    # the volume. Clip the extreme tail so no single SKU dominates completely.
+    # Heavy-tailed popularity: a few SKUs do most of the volume. Clip the tail
+    # so none of them runs away completely.
     pop = rng.pareto(1.8, N_PRODUCTS) + 1.0
     pop = np.minimum(pop, 5.0 * np.median(pop))
     rank_to_idx = np.argsort(-pop)
@@ -170,15 +165,13 @@ def build_products(rng) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
 
-    # ~3% of SKUs have no cost recorded in the system. Keep a shadow value for
-    # pricing (the business still sells them) but report the cost as missing.
+    # Price is set while every SKU still has a cost, then ~3% have their cost
+    # blanked to mimic a gap in the product system. The business still sells
+    # them, so order prices stay realistic; only the reported cost, and hence
+    # their margin, goes missing.
+    df["net_price"] = (df["cost_price"] * df["markup"]).round(2)
     missing = rng.choice(rank_to_idx[35:], size=4, replace=False)
-    df["cost_for_pricing"] = df["cost_price"]
-    cat_mean = {c: sum(COST_RANGE[c]) / 2 for c in CATEGORIES}
     df.loc[df["idx"].isin(missing), "cost_price"] = np.nan
-
-    df["net_price"] = (df["cost_for_pricing"].fillna(df["category"].map(cat_mean))
-                       * df["markup"]).round(2)
     df["popularity"] = pop
     df["is_loss_maker"] = df["idx"].isin(rank_to_idx[LOSS_MAKER_RANKS])
     df["asin"] = [_asin(rng) for _ in range(N_PRODUCTS)]
@@ -246,8 +239,7 @@ def _native_sku(rng, product: pd.Series, channel: str) -> str:
 
 
 def build_channel_fees() -> pd.DataFrame:
-    # fulfilment_fee is charged per unit shipped. own_store has no marketplace
-    # referral; its 2.9% stands in for card processing.
+    # fulfilment_fee is per unit. own_store's 2.9% is really card processing.
     return pd.DataFrame([
         dict(channel="own_store", referral_pct=0.029, fulfilment_fee=1.25, monthly_fixed=220.0),
         dict(channel="amazon", referral_pct=0.150, fulfilment_fee=3.90, monthly_fixed=39.0),
@@ -370,9 +362,8 @@ def build_sku_mapping(rng, products: pd.DataFrame):
     mapping = pd.DataFrame(rows, columns=["channel", "channel_sku", "sku"])
     mapping = mapping.drop_duplicates(subset=["channel", "channel_sku"])
 
-    # Drop ~10% of the non-own-store rows so a real slice of channel codes has
-    # no canonical match. Keep the very top sellers mapped so the gap stays a
-    # realistic nuisance rather than a hole in the headline numbers.
+    # Drop ~10% of non-own-store rows so some codes don't map. Keep the top
+    # sellers mapped so the gap is a nuisance, not a hole in the headline.
     top_skus = set(products.nlargest(12, "popularity")["sku"])
     droppable = mapping[(mapping["channel"] != "own_store")
                         & (~mapping["sku"].isin(top_skus))]
