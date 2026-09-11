@@ -5,13 +5,14 @@ page-ready tables to data/clean/marts/.
 
 The model, per order line (everything already net of VAT):
 
-    net revenue = quantity * (unit_price - discount)
-    net margin  = net revenue - COGS - shipping - channel fees
-                  - refunds - return shipping
+    net revenue         = quantity * (unit_price - discount)
+    contribution margin = net revenue - COGS - shipping - referral - fulfilment
+                          - refunds - return shipping
 
-Channel fees: referral is a % of net revenue, fulfilment is per unit, the
-monthly platform fee is split across lines pro-rata by net revenue within a
-channel. A return reverses the sale (refund + return postage).
+Contribution margin is what SKU and channel pages use: revenue minus the costs
+that move when you sell one more unit. The fixed monthly platform fee is a
+whole-business overhead, not caused by any SKU, so it only appears on the
+overview waterfall, which lands on true net margin.
 
 Run with:  python -m pipeline.metrics
 """
@@ -59,11 +60,12 @@ def enrich(order_lines: pd.DataFrame, channel_fees: pd.DataFrame) -> pd.DataFram
     df["refund"] = df["returned_qty"] * (df["unit_price"] - df["discount"])
     df["return_shipping"] = np.where(df["returned_qty"] > 0, df["shipping_cost"], 0.0)
 
-    df["net_margin"] = (df["net_revenue"] - df["cogs"] - df["outbound_shipping"]
-                        - df["referral_fee"] - df["fulfilment"] - df["platform_fee"]
-                        - df["refund"] - df["return_shipping"])
+    df["contribution_margin"] = (df["net_revenue"] - df["cogs"] - df["outbound_shipping"]
+                                 - df["referral_fee"] - df["fulfilment"]
+                                 - df["refund"] - df["return_shipping"])
 
-    # Stock that came back resellable. Not credited to margin yet.
+    # TODO: resellable returns are treated as a full loss. Crediting the stock
+    # back needs resale timing and open-box discounts modelled.
     df["recoverable_stock"] = df["resellable_qty"] * df["cost_price"]
     return df
 
@@ -76,9 +78,10 @@ def _platform_fee(df: pd.DataFrame, channel_fees: pd.DataFrame) -> pd.Series:
 
 
 def margin_waterfall(enriched: pd.DataFrame) -> pd.DataFrame:
-    rows = [(label, sign * enriched[col].sum()) for label, col, sign in WATERFALL_STEPS]
-    rows.append(("Net margin", enriched["net_margin"].sum()))
-    return pd.DataFrame(rows, columns=["step", "amount"]).round(2)
+    rows = [(label, round(sign * enriched[col].sum(), 2))
+            for label, col, sign in WATERFALL_STEPS]
+    rows.append(("Net margin", round(sum(amount for _, amount in rows), 2)))
+    return pd.DataFrame(rows, columns=["step", "amount"])
 
 
 def sku_profitability(enriched: pd.DataFrame) -> pd.DataFrame:
@@ -86,12 +89,12 @@ def sku_profitability(enriched: pd.DataFrame) -> pd.DataFrame:
          .agg(name=("name", "first"), category=("category", "first"),
               units=("quantity", "sum"),
               net_revenue=("net_revenue", "sum"),
-              net_margin=("net_margin", "sum"))
+              contribution_margin=("contribution_margin", "sum"))
          .reset_index())
-    g["net_margin_pct"] = g["net_margin"] / g["net_revenue"]
+    g["contribution_margin_pct"] = g["contribution_margin"] / g["net_revenue"]
 
     high_revenue = g["net_revenue"] >= g["net_revenue"].mean()
-    healthy = g["net_margin_pct"] >= HEALTHY_MARGIN_PCT
+    healthy = g["contribution_margin_pct"] >= HEALTHY_MARGIN_PCT
     g["quadrant"] = np.select(
         [high_revenue & healthy, high_revenue & ~healthy, ~high_revenue & healthy],
         ["Volume drivers", "Hidden losers", "Quiet winners"],
@@ -104,9 +107,9 @@ def channel_comparison(enriched: pd.DataFrame) -> pd.DataFrame:
          .agg(name=("name", "first"),
               units=("quantity", "sum"),
               net_revenue=("net_revenue", "sum"),
-              net_margin=("net_margin", "sum"))
+              contribution_margin=("contribution_margin", "sum"))
          .reset_index())
-    g["net_margin_pct"] = g["net_margin"] / g["net_revenue"]
+    g["contribution_margin_pct"] = g["contribution_margin"] / g["net_revenue"]
     sold_on_several = g.groupby("canonical_sku")["channel"].transform("nunique") > 1
     return (g[sold_on_several]
             .sort_values(["name", "channel"]).reset_index(drop=True).round(2))
@@ -118,13 +121,13 @@ def returns_summary(enriched: pd.DataFrame, by) -> pd.DataFrame:
               units_returned=("returned_qty", "sum"),
               refund=("refund", "sum"),
               return_shipping=("return_shipping", "sum"),
-              net_margin=("net_margin", "sum"),
+              contribution_margin=("contribution_margin", "sum"),
               recoverable_stock=("recoverable_stock", "sum"))
          .reset_index())
     g["return_rate"] = g["units_returned"] / g["units_sold"]
     g["returns_cost"] = g["refund"] + g["return_shipping"]
-    g["margin_before_returns"] = g["net_margin"] + g["returns_cost"]
-    g["returns_flip_negative"] = (g["margin_before_returns"] > 0) & (g["net_margin"] < 0)
+    g["margin_before_returns"] = g["contribution_margin"] + g["returns_cost"]
+    g["returns_flip_negative"] = (g["margin_before_returns"] > 0) & (g["contribution_margin"] < 0)
     return g.sort_values("returns_cost", ascending=False).reset_index(drop=True).round(2)
 
 
@@ -145,8 +148,8 @@ def returns_by_reason(enriched: pd.DataFrame, returns: pd.DataFrame) -> pd.DataF
 
 
 def headline_finding(enriched: pd.DataFrame) -> pd.DataFrame:
-    """The loss-making bestseller: worst total margin among top-10 revenue
-    SKUs, using only months whose return window has closed."""
+    """The loss-making bestseller: worst contribution margin among top-10
+    revenue SKUs, using only months whose return window has closed."""
     settled = enriched[~enriched["returns_provisional"]]
     years = _years_covered(settled)
 
@@ -154,12 +157,12 @@ def headline_finding(enriched: pd.DataFrame) -> pd.DataFrame:
               .agg(name=("name", "first"), category=("category", "first"),
                    units=("quantity", "sum"),
                    net_revenue=("net_revenue", "sum"),
-                   net_margin=("net_margin", "sum"))
+                   contribution_margin=("contribution_margin", "sum"))
               .reset_index())
     by_sku["revenue_rank"] = by_sku["net_revenue"].rank(ascending=False).astype(int)
 
-    candidates = by_sku[(by_sku["net_margin"] < 0) & (by_sku["revenue_rank"] <= 10)]
-    worst = candidates.sort_values("net_margin").iloc[0]
+    candidates = by_sku[(by_sku["contribution_margin"] < 0) & (by_sku["revenue_rank"] <= 10)]
+    worst = candidates.sort_values("contribution_margin").iloc[0]
 
     return pd.DataFrame([{
         "canonical_sku": worst["canonical_sku"],
@@ -167,7 +170,7 @@ def headline_finding(enriched: pd.DataFrame) -> pd.DataFrame:
         "category": worst["category"],
         "revenue_rank": int(worst["revenue_rank"]),
         "annual_revenue_eur": round(worst["net_revenue"] / years),
-        "annual_loss_eur": round(-worst["net_margin"] / years),
+        "annual_loss_eur": round(-worst["contribution_margin"] / years),
     }])
 
 
@@ -212,7 +215,8 @@ def main() -> None:
 
     print("\n=== SKUs where returns flip margin negative ===")
     flip = marts["returns_by_sku"]
-    flip = flip[flip["returns_flip_negative"]][["name", "return_rate", "returns_cost", "net_margin"]]
+    flip = flip[flip["returns_flip_negative"]][
+        ["name", "return_rate", "returns_cost", "contribution_margin"]]
     print(flip.to_string(index=False) if len(flip) else "(none)")
 
 

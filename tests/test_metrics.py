@@ -79,13 +79,13 @@ def test_waterfall_reconciles_to_net_margin():
 def test_quadrants():
     g = pd.DataFrame([
         dict(canonical_sku="A", name="A", category="C", quantity=1,
-             net_revenue=1000.0, net_margin=200.0),   # high rev, healthy
+             net_revenue=1000.0, contribution_margin=200.0),   # high rev, healthy
         dict(canonical_sku="B", name="B", category="C", quantity=1,
-             net_revenue=1000.0, net_margin=-50.0),   # high rev, unhealthy
+             net_revenue=1000.0, contribution_margin=-50.0),   # high rev, unhealthy
         dict(canonical_sku="C", name="C", category="C", quantity=1,
-             net_revenue=10.0, net_margin=5.0),       # low rev, healthy
+             net_revenue=10.0, contribution_margin=5.0),       # low rev, healthy
         dict(canonical_sku="D", name="D", category="C", quantity=1,
-             net_revenue=10.0, net_margin=-1.0),      # low rev, unhealthy
+             net_revenue=10.0, contribution_margin=-1.0),      # low rev, unhealthy
     ])
     out = metrics.sku_profitability(g).set_index("canonical_sku")["quadrant"].to_dict()
     assert out == {"A": "Volume drivers", "B": "Hidden losers",
@@ -127,5 +127,5 @@ def test_story_holds_on_real_data():
     for name in ["Stainless Steel Stand Mixer", "Cast Iron Casserole 5L",
                  "Ceramic Dinner Set 12-Piece"]:
         row = sku[sku["name"] == name].iloc[0]
-        assert row["net_margin"] < 0, f"{name} should be loss-making"
+        assert row["contribution_margin"] < 0, f"{name} should be loss-making"
         assert name in top5, f"{name} should be a top-5 revenue SKU"
