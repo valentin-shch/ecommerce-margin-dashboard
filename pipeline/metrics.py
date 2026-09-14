@@ -9,6 +9,10 @@ The model, per order line (everything already net of VAT):
     contribution margin = net revenue - COGS - shipping - referral - fulfilment
                           - refunds - return shipping
 
+Fulfilment fee is the channel's quoted per-unit rate scaled by weight band
+(FULFILMENT_WEIGHT_FACTOR) - the quoted rate alone is a flat fee that would
+make a cheap, light item's fulfilment cost dwarf its price.
+
 Contribution margin is what SKU and channel pages use: revenue minus the costs
 that move when you sell one more unit. The fixed monthly platform fee is a
 whole-business overhead, not caused by any SKU, so it only appears on the
@@ -29,6 +33,13 @@ MARTS_DIR = CLEAN_DIR / "marts"
 # SKU matrix cutoffs: "high revenue" is above the mean (right-skewed, so this
 # is roughly the top third), "healthy" is margin above this. Blunt on purpose.
 HEALTHY_MARGIN_PCT = 0.10
+
+# channel_fees quotes one fulfilment rate per channel, but real per-unit
+# fulfilment fees scale with parcel size - a flat rate would let a cheap,
+# light item's fee dwarf its price. Scales the quoted rate by weight band.
+FULFILMENT_WEIGHT_FACTOR = {
+    "0-0.5": 0.55, "0.5-1": 0.75, "1-2": 1.00, "2-5": 1.40, "5+": 1.90,
+}
 
 WATERFALL_STEPS = [
     ("Gross revenue", "gross_revenue", 1),
@@ -55,7 +66,7 @@ def enrich(order_lines: pd.DataFrame, channel_fees: pd.DataFrame) -> pd.DataFram
     df["cogs"] = q * df["cost_price"]
     df["outbound_shipping"] = df["shipping_cost"]
     df["referral_fee"] = df["net_revenue"] * df["referral_pct"]
-    df["fulfilment"] = q * df["fulfilment_fee"]
+    df["fulfilment"] = q * df["fulfilment_fee"] * df["weight_band"].map(FULFILMENT_WEIGHT_FACTOR)
     df["platform_fee"] = _platform_fee(df, channel_fees)
     df["refund"] = df["returned_qty"] * (df["unit_price"] - df["discount"])
     df["return_shipping"] = np.where(df["returned_qty"] > 0, df["shipping_cost"], 0.0)

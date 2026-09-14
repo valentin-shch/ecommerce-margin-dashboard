@@ -15,7 +15,8 @@ def line(**overrides):
     row = dict(order_id="ORD-1", channel="amazon", canonical_sku="VH-1", name="Thing",
                category="Cat", quantity=1, unit_price=100.0, discount=0.0,
                cost_price=40.0, shipping_cost=5.0, referral_pct=0.15,
-               fulfilment_fee=4.0, returned_qty=0, resellable_qty=0,
+               fulfilment_fee=4.0, weight_band="1-2",  # factor 1.00, no scaling
+               returned_qty=0, resellable_qty=0,
                returns_provisional=False, order_date=pd.Timestamp("2025-01-15"))
     row.update(overrides)
     return row
@@ -45,6 +46,14 @@ def test_lines_with_unknown_cost_are_dropped():
 def test_full_return_cancels_the_revenue():
     e = metrics.enrich(frame(line(quantity=1, returned_qty=1)), FEES)
     assert e["net_revenue"].iloc[0] - e["refund"].iloc[0] == 0.0
+
+
+def test_fulfilment_fee_scales_down_for_light_items():
+    e = metrics.enrich(frame(line(weight_band="0-0.5"), line(weight_band="5+")), FEES)
+    light, heavy = e["fulfilment"].tolist()
+    assert light == pytest.approx(4.0 * 0.55)
+    assert heavy == pytest.approx(4.0 * 1.90)
+    assert light < 4.0 < heavy  # quoted rate is the mid-tier, not a floor or ceiling
 
 
 def test_return_adds_a_shipping_leg():
