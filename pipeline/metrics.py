@@ -152,6 +152,9 @@ def headline_finding(enriched: pd.DataFrame) -> pd.DataFrame:
     revenue SKUs, using only months whose return window has closed."""
     settled = enriched[~enriched["returns_provisional"]]
     years = _years_covered(settled)
+    # Same settled-months basis as the SKU figures below, so the two can be
+    # compared (e.g. "X is N% of annual profit") without mixing methodologies.
+    annual_net_margin = (settled["contribution_margin"].sum() - settled["platform_fee"].sum()) / years
 
     by_sku = (settled.groupby("canonical_sku")
               .agg(name=("name", "first"), category=("category", "first"),
@@ -171,6 +174,7 @@ def headline_finding(enriched: pd.DataFrame) -> pd.DataFrame:
         "revenue_rank": int(worst["revenue_rank"]),
         "annual_revenue_eur": round(worst["net_revenue"] / years),
         "annual_loss_eur": round(-worst["contribution_margin"] / years),
+        "annual_net_margin_eur": round(annual_net_margin),
     }])
 
 
