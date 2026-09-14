@@ -39,7 +39,10 @@ if len(losing) and losing["contribution_margin"].sum() != 0:
     if worst_share > 0.6:
         where = f", mostly on {CHANNEL_LABELS[worst['channel']]}"
 
-profit_share = headline["annual_loss_eur"] / headline["annual_net_margin_eur"]
+# Same halving a reader would do by hand from the two numbers already on this
+# page (annual loss, and net margin below) - matching that keeps the % checkable.
+annual_net_margin = net_margin / 2
+profit_share = headline["annual_loss_eur"] / annual_net_margin
 
 st.markdown("##### Headline finding")
 with st.container(border=True):
@@ -107,11 +110,13 @@ unmapped_pct = (order_lines["cost_missing_reason"] == "unmapped_sku").mean()
 no_cost_pct = (order_lines["cost_missing_reason"] == "no_cost_recorded").mean()
 recoverable_stock = load_mart("returns_by_sku")["recoverable_stock"].sum()
 true_gross_revenue = (order_lines["quantity"] * order_lines["unit_price"]).sum()
+excluded_revenue_share = 1 - gross_revenue / true_gross_revenue
 
 st.caption(
     f"Every figure above, including gross revenue, excludes "
-    f"{unmapped_pct + no_cost_pct:.1%} of order lines with no usable cost "
-    f"(true gross revenue across all lines is {fmt_eur_compact(true_gross_revenue)}): "
+    f"{unmapped_pct + no_cost_pct:.1%} of order lines with no usable cost - "
+    f"{excluded_revenue_share:.1%} of revenue, since those lines skew slightly "
+    f"larger (true gross revenue across all lines is {fmt_eur_compact(true_gross_revenue)}): "
     f"{unmapped_pct:.1%} couldn't be matched to a product, {no_cost_pct:.1%} are "
     "matched SKUs with no cost on file. Refunds and product cost aren't double "
     "counted: refunds return the sale price, cost stays charged because stock "
