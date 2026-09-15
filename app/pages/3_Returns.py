@@ -3,15 +3,19 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from loaders import load_mart
+from loaders import load_clean, load_mart
 from ui import PLOTLY_CONFIG, configure_page, fmt_eur_compact
 
 configure_page("Returns", "What do returns actually cost, and where?")
 
+order_lines = load_clean("order_lines")
+no_cost_share = order_lines["cost_price"].isna().mean()
+
 st.caption(
     "Totals over the full 24 months, including the still-provisional last two "
     "(returns are charged back to the month of the original sale, not the month "
-    "they arrive - see Overview for why)."
+    f"they arrive - see Overview for why). Excludes the {no_cost_share:.1%} of order "
+    "lines with no usable cost, same as Overview and SKU profitability - see Data quality."
 )
 
 by_channel = load_mart("returns_by_channel")
@@ -52,15 +56,38 @@ else:
     st.caption("No product's margin flips negative because of returns this period.")
 
 st.markdown("##### Return cost by")
-dim = st.radio("Break down by", ["Category", "Channel", "Reason"],
+dim = st.radio("Break down by", ["Category", "Channel", "Reason", "SKU"],
                horizontal=True, label_visibility="collapsed")
 
 CHANNEL_AXIS_LABELS = {"own_store": "Own store", "amazon": "Amazon", "marketplace": "Marketplace"}
+SKU_CHART_LIMIT = 8  # 116 SKUs won't fit a bar chart - top N by cost, same idea as the category cut
 
-if dim == "Category":
+if dim == "SKU":
+    d = by_sku.nlargest(SKU_CHART_LIMIT, "returns_cost").sort_values("returns_cost")
+    labels = d["name"]
+    sublabels = [f"{r:.0%} return rate" for r in d["return_rate"]]
+    st.caption(f"Top {SKU_CHART_LIMIT} products by returns cost, not filtered to "
+              "negative margin like the table above.")
+elif dim == "Category":
     d = load_mart("returns_by_category").sort_values("returns_cost")
     labels = d["category"]
     sublabels = [f"{r:.0%} return rate" for r in d["return_rate"]]
+
+    # A category's rate can be one bad SKU dragging the average up rather than
+    # a category-wide pattern - flag it when that's what's actually happening.
+    worst_cat = d.loc[d["return_rate"].idxmax()]
+    cat_skus = by_sku[by_sku["category"] == worst_cat["category"]]
+    top_sku = cat_skus.loc[cat_skus["units_returned"].idxmax()]
+    concentration = top_sku["units_returned"] / cat_skus["units_returned"].sum()
+    rest = cat_skus.drop(top_sku.name)
+    rate_without_top = rest["units_returned"].sum() / rest["units_sold"].sum()
+    if concentration > 0.4 and worst_cat["return_rate"] > total_rate * 1.5:
+        st.caption(
+            f"{worst_cat['category']}'s {worst_cat['return_rate']:.0%} rate is mostly one "
+            f"product: **{top_sku['name']}** alone is {concentration:.0%} of the category's "
+            f"returned units. Without it, {worst_cat['category']} runs {rate_without_top:.1%} - "
+            f"close to the {total_rate:.1%} overall rate."
+        )
 elif dim == "Channel":
     d = load_mart("returns_by_channel").sort_values("returns_cost")
     labels = d["channel"].map(CHANNEL_AXIS_LABELS)
@@ -78,22 +105,31 @@ fig = go.Figure(go.Bar(
               for lab, c, sub in zip(labels, d["returns_cost"], sublabels)],
     hoverinfo="text",
 ))
-# Same fixed right-hand label column as the Overview waterfall - a bar-relative
-# label collides with the axis once a bar is short, a paper-anchored one can't.
+# Plotly's native y-axis tick labels clipped the odd long product name by a
+# character - a left-hand paper-anchored annotation column can't be clipped
+# by axis margin math, same fix as the right-hand value column below.
 for label, cost, sub in zip(labels, d["returns_cost"], sublabels):
+    fig.add_annotation(x=0.0, xref="paper", xanchor="right", xshift=-10,
+                       y=label, yref="y", showarrow=False, align="right",
+                       text=str(label), font=dict(size=15, color="#52514e"))
     fig.add_annotation(x=1.0, xref="paper", xanchor="left", xshift=10,
                        y=label, yref="y", showarrow=False, align="left",
                        text=f"{fmt_eur_compact(cost)}<br><span style='font-size:12px'>{sub}</span>",
                        font=dict(size=15, color="#52514e"))
 fig.update_xaxes(showticklabels=False, range=[0, d["returns_cost"].max() * 1.05])
-fig.update_yaxes(tickfont=dict(size=15))
+fig.update_yaxes(showticklabels=False)
+left_margin = min(220, 24 + 7 * max(len(str(l)) for l in labels))
 fig.update_layout(
     height=max(220, 90 + 55 * len(d)),
-    margin=dict(l=10, r=130, t=10, b=10),
+    margin=dict(l=left_margin, r=130, t=10, b=10),
     font=dict(size=15),
     bargap=0.3,
 )
 st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG, theme="streamlit")
+st.caption(
+    "The % beside each bar is a return rate, except for Reason and the callout "
+    "above, which show a share of returns instead - same-looking number, different question."
+)
 
 l1, l2 = st.columns(2)
 l1.page_link("pages/2_SKU_profitability.py", label="← SKU profitability")
