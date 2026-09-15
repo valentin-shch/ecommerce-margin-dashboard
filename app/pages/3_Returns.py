@@ -38,10 +38,11 @@ if n:
     with st.container(border=True):
         st.markdown(
             f"Returns flip {subject} margin negative this period. The biggest: "
-            f"**{worst['name']}** was marginally profitable "
+            f"**{worst['name']}** was profitable "
             f"({fmt_eur_compact(worst['margin_before_returns'])}) before returns; a "
             f"{worst['return_rate']:.0%} return rate costs {fmt_eur_compact(worst['returns_cost'])}, "
-            f"flipping it to a {fmt_eur_compact(worst['contribution_margin'])} loss (24 months)."
+            f"more than wiping it out and flipping it to a "
+            f"{fmt_eur_compact(worst['contribution_margin'])} loss (24 months)."
         )
         # Even 3 columns ran off the right edge at 390px with the last one
         # invisible and no scroll cue - every row here is already margin-negative

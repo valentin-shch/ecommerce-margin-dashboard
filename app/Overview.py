@@ -29,6 +29,12 @@ wf = load_mart("margin_waterfall")
 net_margin = wf.loc[wf["step"] == "Net margin", "amount"].iloc[0]
 gross_revenue = wf.loc[wf["step"] == "Gross revenue", "amount"].iloc[0]
 
+# fmt_eur_compact rounds each waterfall step to the nearest €1K independently,
+# and independent roundings don't always sum to the total's own independent
+# rounding. Deriving the displayed net margin from the displayed parts keeps
+# the waterfall (and the KPI above it) exactly addable by hand.
+net_margin_display = round((wf.loc[wf["step"] != "Net margin", "amount"] / 1000).round().sum() * 1000)
+
 # Which channel the loss is concentrated in, if it's concentrated at all.
 by_channel = channel_cc[channel_cc["canonical_sku"] == headline["canonical_sku"]]
 losing = by_channel[by_channel["contribution_margin"] < 0]
@@ -41,7 +47,7 @@ if len(losing) and losing["contribution_margin"].sum() != 0:
 
 # Same halving a reader would do by hand from the two numbers already on this
 # page (annual loss, and net margin below) - matching that keeps the % checkable.
-annual_net_margin = net_margin / 2
+annual_net_margin = net_margin_display / 2
 profit_share = headline["annual_loss_eur"] / annual_net_margin
 
 st.markdown("##### Headline finding")
@@ -62,7 +68,7 @@ st.caption("September 2024 to August 2026 (24 months). Revenue is ex-VAT.")
 
 k1, k2 = st.columns(2)
 k1.metric("Net margin (before overheads)",
-         f"{fmt_eur_compact(net_margin)} ({net_margin / gross_revenue:.1%})")
+         f"{fmt_eur_compact(net_margin_display)} ({net_margin_display / gross_revenue:.1%})")
 k2.metric("Gross revenue", fmt_eur_compact(gross_revenue))
 st.caption(
     "\"Before overheads\" means after channel fees and shipping, not general "
@@ -91,7 +97,9 @@ fig = go.Figure(go.Waterfall(
 # A label placed at each bar's own edge collides with the axis text once a
 # bar's cumulative position sits low in the range. A fixed right-hand column
 # can't collide with anything, so every value lands there instead.
-for label, amount in zip(display_labels, wf["amount"]):
+label_amounts = wf["amount"].copy()
+label_amounts.iloc[-1] = net_margin_display  # "Net margin" is always the last row
+for label, amount in zip(display_labels, label_amounts):
     fig.add_annotation(x=1.0, xref="paper", xanchor="left", xshift=10,
                        y=label, yref="y", showarrow=False,
                        text=fmt_eur_compact(amount), font=dict(size=17, color="#52514e"))

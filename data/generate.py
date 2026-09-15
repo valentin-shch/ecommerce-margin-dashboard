@@ -70,13 +70,13 @@ FORCED = {
     0: dict(category="Utensils", name="Bamboo Kitchen Utensil Set",
             cost_price=14.00, weight_kg=0.40, markup=1.62, ret_mult=1.0),
     1: dict(category="Small Appliances", name="Stainless Steel Stand Mixer",
-            cost_price=49.00, weight_kg=4.20, markup=1.50, ret_mult=2.3),
+            cost_price=49.00, weight_kg=4.20, markup=2.04, ret_mult=2.3),
     2: dict(category="Cookware", name="Cast Iron Casserole 5L",
-            cost_price=23.50, weight_kg=3.70, markup=1.85, ret_mult=2.0),
+            cost_price=23.50, weight_kg=3.70, markup=2.05, ret_mult=2.0),
     3: dict(category="Storage", name="Glass Storage Jar Set of 6",
             cost_price=23.00, weight_kg=0.65, markup=1.60, ret_mult=1.0),
     5: dict(category="Tableware", name="Ceramic Dinner Set 12-Piece",
-            cost_price=29.00, weight_kg=5.30, markup=2.00, ret_mult=2.1),
+            cost_price=29.00, weight_kg=5.30, markup=2.26, ret_mult=2.1),
 }
 LOSS_MAKER_RANKS = [1, 2, 5]
 
