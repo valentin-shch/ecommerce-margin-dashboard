@@ -10,7 +10,9 @@ from ui import PLOTLY_CONFIG, configure_page, fmt_eur, fmt_eur_compact
 configure_page("SKU profitability", "Which products actually make money?")
 
 st.caption(
-    "Each point is one product, over the same 24 months as the Overview. "
+    "Each point is one product, totalled over all 24 months including the "
+    "still-provisional ones (the Overview's per-year figures use only settled "
+    "months, so don't expect this page's totals to divide evenly into those). "
     "Revenue across (log scale, since a few products sell far more than most), "
     "contribution margin up. Products with no recorded cost aren't shown - "
     "see Data quality."
@@ -104,12 +106,16 @@ with st.container(border=True):
 if not points:
     st.caption("Tap or click any point on the chart to see that product here instead.")
 
-st.markdown("##### Hidden losers")
-st.caption(
-    "Big sellers with margin below the 10% healthy bar, worst first. Not all "
-    "are actually losing money - some are just too thin for how much they sell."
-)
 losers = sku[sku["quadrant"] == "Hidden losers"].sort_values("contribution_margin")
+still_positive = int((losers["contribution_margin"] >= 0).sum())
+positive_note = (f" {still_positive} of these are still (barely) profitable - just far "
+                 "thinner than a top seller's margin should be." if still_positive else "")
+
+st.markdown("##### Below the healthy bar")
+st.caption(
+    "The Hidden losers quadrant from the chart above, worst margin first."
+    f"{positive_note}"
+)
 if len(losers):
     table = losers[["name", "net_revenue", "contribution_margin_pct"]].copy()
     table["net_revenue"] = table["net_revenue"].apply(fmt_eur_compact)
