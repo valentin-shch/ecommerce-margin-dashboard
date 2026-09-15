@@ -96,7 +96,8 @@ st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG, theme="stre
 st.markdown("##### Where channel decides profit or loss")
 st.caption(
     f"{len(flips)} products are negative margin on one channel and positive on "
-    "another - same product, same cost, different outcome depending where it sells."
+    "another - same product, same cost, different outcome depending where it sells. "
+    "Sorted by the size of that swing, biggest first."
 )
 if len(flips):
     # A "best channel X% -> worst channel Y%" column still overflowed at 390px
