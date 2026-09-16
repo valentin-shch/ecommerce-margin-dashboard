@@ -169,6 +169,7 @@ def run() -> dict[str, pd.DataFrame]:
     products.to_parquet(CLEAN_DIR / "products.parquet", index=False)
     raw["shipping"].to_parquet(CLEAN_DIR / "shipping.parquet", index=False)
     raw["channel_fees"].to_parquet(CLEAN_DIR / "channel_fees.parquet", index=False)
+    raw["sku_mapping"].to_parquet(CLEAN_DIR / "sku_mapping.parquet", index=False)
     dq.to_parquet(CLEAN_DIR / "dq_summary.parquet", index=False)
 
     return {"order_lines": order_lines, "returns": returns, "products": products, "dq_summary": dq}

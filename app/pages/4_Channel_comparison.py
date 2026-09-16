@@ -115,4 +115,4 @@ else:
 
 l1, l2 = st.columns(2)
 l1.page_link("pages/3_Returns.py", label="← Returns")
-l2.page_link("pages/5_Data_quality.py", label="Data quality →")
+l2.page_link("pages/5_Data_engineering.py", label="Data engineering →")

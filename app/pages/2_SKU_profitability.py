@@ -15,7 +15,7 @@ st.caption(
     "months, so don't expect this page's totals to divide evenly into those). "
     "Revenue across (log scale, since a few products sell far more than most), "
     "contribution margin up. Products with no recorded cost aren't shown - "
-    "see Data quality."
+    "see Data engineering."
 )
 
 sku = load_mart("sku_profitability")

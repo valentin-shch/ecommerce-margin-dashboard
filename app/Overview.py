@@ -133,5 +133,5 @@ st.caption(
     "not the month they arrive, so the last two months are still provisional."
 )
 l3, l4 = st.columns(2)
-l3.page_link("pages/5_Data_quality.py", label="Data quality →")
+l3.page_link("pages/5_Data_engineering.py", label="Data engineering →")
 l4.page_link("pages/3_Returns.py", label="Returns →")

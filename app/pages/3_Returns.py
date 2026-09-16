@@ -15,7 +15,7 @@ st.caption(
     "Totals over the full 24 months, including the still-provisional last two "
     "(returns are charged back to the month of the original sale, not the month "
     f"they arrive - see Overview for why). Excludes the {no_cost_share:.1%} of order "
-    "lines with no usable cost, same as Overview and SKU profitability - see Data quality."
+    "lines with no usable cost, same as Overview and SKU profitability - see Data engineering."
 )
 
 by_channel = load_mart("returns_by_channel")
