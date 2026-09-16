@@ -39,7 +39,11 @@ net_margin_display = round((wf.loc[wf["step"] != "Net margin", "amount"] / 1000)
 by_channel = channel_cc[channel_cc["canonical_sku"] == headline["canonical_sku"]]
 losing = by_channel[by_channel["contribution_margin"] < 0]
 where = ""
-if len(losing) and losing["contribution_margin"].sum() != 0:
+if len(losing) == 1:
+    # Only one channel is underwater - "mostly" undersells that, since the
+    # others aren't just breaking even, they're net positive and offsetting it.
+    where = f", all of it on {CHANNEL_LABELS[losing.iloc[0]['channel']]}"
+elif len(losing) and losing["contribution_margin"].sum() != 0:
     worst = losing.loc[losing["contribution_margin"].idxmin()]
     worst_share = worst["contribution_margin"] / losing["contribution_margin"].sum()
     if worst_share > 0.6:

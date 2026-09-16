@@ -35,14 +35,20 @@ st.markdown("##### Where returns flip margin negative")
 if n:
     worst = flips.iloc[0]
     subject = "1 product's" if n == 1 else f"{n} products'"
+    # Independently rounding "before" and "cost" to the nearest €1K, then also
+    # independently rounding their (precise) difference, doesn't guarantee the
+    # three add up - same lesson as the Overview waterfall. Deriving the loss
+    # from the two rounded figures already on screen keeps it hand-checkable.
+    before_k = round(worst["margin_before_returns"] / 1000)
+    cost_k = round(worst["returns_cost"] / 1000)
+    loss_display = fmt_eur_compact((before_k - cost_k) * 1000)
     with st.container(border=True):
         st.markdown(
             f"Returns flip {subject} margin negative this period. The biggest: "
             f"**{worst['name']}** was profitable "
             f"({fmt_eur_compact(worst['margin_before_returns'])}) before returns; a "
             f"{worst['return_rate']:.0%} return rate costs {fmt_eur_compact(worst['returns_cost'])}, "
-            f"more than wiping it out and flipping it to a "
-            f"{fmt_eur_compact(worst['contribution_margin'])} loss (24 months)."
+            f"more than wiping it out and flipping it to a {loss_display} loss (24 months)."
         )
         # Even 3 columns ran off the right edge at 390px with the last one
         # invisible and no scroll cue - every row here is already margin-negative
